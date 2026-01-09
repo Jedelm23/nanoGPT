@@ -42,7 +42,7 @@ init_from = 'scratch' # 'scratch' or 'resume' or 'gpt2*'
 # wandb logging
 wandb_log = False # disabled by default
 wandb_project = 'owt'
-wandb_run_name = 'gpt2' # 'run' + str(time.time())
+wandb_run_name = 'synthetic_data' # 'run' + str(time.time())
 # data
 dataset = 'openwebtext'
 gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
@@ -152,7 +152,7 @@ if init_from == 'scratch':
     # determine the vocab size we'll use for from-scratch training
     if meta_vocab_size is None:
         print("defaulting to vocab_size of GPT-2 to 50304 (50257 rounded up for efficiency)")
-    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304
+    model_args['vocab_size'] = meta_vocab_size if meta_vocab_size is not None else 50304 # check: JE
     gptconf = GPTConfig(**model_args)
     model = GPT(gptconf)
 elif init_from == 'resume':
@@ -193,7 +193,8 @@ if block_size < model.config.block_size:
 model.to(device)
 
 # initialize a GradScaler. If enabled=False scaler is a no-op
-scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16'))
+scaler = torch.cuda.amp.GradScaler(enabled=(dtype == 'float16')) # check: JE (depreciated, but need this for my version of pytorch?)
+# scaler = torch.amp.GradScaler(device_type=device_type, enabled=(dtype == 'float16'))
 
 # optimizer
 optimizer = model.configure_optimizers(weight_decay, learning_rate, (beta1, beta2), device_type)
@@ -228,7 +229,7 @@ def estimate_loss():
     return out
 
 # learning rate decay scheduler (cosine with warmup)
-def get_lr(it):
+def get_lr_cosine(it):
     # 1) linear warmup for warmup_iters steps
     if it < warmup_iters:
         return learning_rate * (it + 1) / (warmup_iters + 1)
@@ -240,6 +241,42 @@ def get_lr(it):
     assert 0 <= decay_ratio <= 1
     coeff = 0.5 * (1.0 + math.cos(math.pi * decay_ratio)) # coeff ranges 0..1
     return min_lr + coeff * (learning_rate - min_lr)
+
+# learning rate decay scheduler (warmup stable decay): JE
+def get_lr(it):
+    """
+    Nanochat-style LR schedule:
+    - Linear warmup from 0 -> learning_rate over warmup_iters
+    - Constant learning_rate until lr_decay_iters
+    - Linear decay from learning_rate -> min_lr over the last warmdown window
+    """
+
+    # choose what fraction of training steps to devote to warmdown
+    warmdown_ratio = 0.2  # last 20% of steps are decay, check: JE
+    warmdown_iters = int(warmdown_ratio * lr_decay_iters)
+
+    # 1) warmup: 0 -> learning_rate
+    if it < warmup_iters:
+        return learning_rate * (it + 1) / warmup_iters
+
+    # define phase boundaries
+    stable_start = warmup_iters
+    stable_end   = lr_decay_iters - warmdown_iters  # start of warmdown
+    decay_start  = stable_end
+    decay_end    = lr_decay_iters
+
+    # 2) stable phase: hold at learning_rate
+    if it < stable_end:
+        return learning_rate
+
+    # 3) after official training window: clamp at min_lr
+    if it >= decay_end:
+        return min_lr
+
+    # 4) linear warmdown from learning_rate -> min_lr
+    progress = (it - decay_start) / (decay_end - decay_start)  # in [0, 1]
+    return learning_rate + progress * (min_lr - learning_rate)
+
 
 # logging
 if wandb_log and master_process:
