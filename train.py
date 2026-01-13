@@ -21,6 +21,7 @@ import time
 import math
 import pickle
 from contextlib import nullcontext
+import random
 
 import numpy as np
 import torch
@@ -32,6 +33,7 @@ from model import GPTConfig, GPT
 # -----------------------------------------------------------------------------
 # default config values designed to train a gpt2 (124M) on OpenWebText
 # I/O
+seed = 0 # random seed
 out_dir = 'out'
 eval_interval = 2000
 log_interval = 1
@@ -49,9 +51,9 @@ gradient_accumulation_steps = 5 * 8 # used to simulate larger batch sizes
 batch_size = 12 # if gradient_accumulation_steps > 1, this is the micro-batch size
 block_size = 1024
 # model
-n_layer = 12
-n_head = 12
-n_embd = 768
+n_layer = 4
+n_head = 4
+n_embd = 128
 dropout = 0.0 # for pretraining 0 is good, for finetuning try 0.1+
 bias = False # do we use bias inside LayerNorm and Linear layers?
 # adamw optimizer
@@ -64,6 +66,7 @@ grad_clip = 1.0 # clip gradients at this value, or disable if == 0.0
 # learning rate decay settings
 decay_lr = True # whether to decay the learning rate
 warmup_iters = 2000 # how many steps to warm up for
+warmdown_ratio = 0.2 # percent of lr_decay_iters to warmdown over at the end
 lr_decay_iters = 600000 # should be ~= max_iters per Chinchilla
 min_lr = 6e-5 # minimum learning rate, should be ~= learning_rate/10 per Chinchilla
 # DDP settings
@@ -79,6 +82,23 @@ config = {k: globals()[k] for k in config_keys} # will be useful for logging
 # -----------------------------------------------------------------------------
 
 # various inits, derived attributes, I/O setup
+
+# set seed
+def set_seed(seed: int) -> None:
+    """Set seeds across libraries and enforce (near) determinism."""
+    # Python
+    random.seed(seed)
+    # NumPy
+    np.random.seed(seed)
+    # PyTorch CPU
+    torch.manual_seed(seed)
+    # PyTorch GPU
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    # cuDNN determinism
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
 ddp = int(os.environ.get('RANK', -1)) != -1 # is this a ddp run?
 if ddp:
     init_process_group(backend=backend)
@@ -103,7 +123,10 @@ print(f"tokens per iteration will be: {tokens_per_iter:,}")
 
 if master_process:
     os.makedirs(out_dir, exist_ok=True)
-torch.manual_seed(1337 + seed_offset)
+    
+base_seed = config.get("seed", 1337)          # configurable base seed JE
+set_seed(base_seed + seed_offset)             #  deterministic seeding per rank JE
+
 torch.backends.cuda.matmul.allow_tf32 = True # allow tf32 on matmul
 torch.backends.cudnn.allow_tf32 = True # allow tf32 on cudnn
 device_type = 'cuda' if 'cuda' in device else 'cpu' # for later use in torch.autocast
@@ -252,7 +275,6 @@ def get_lr(it):
     """
 
     # choose what fraction of training steps to devote to warmdown
-    warmdown_ratio = 0.2  # last 20% of steps are decay, check: JE
     warmdown_iters = int(warmdown_ratio * lr_decay_iters)
 
     # 1) warmup: 0 -> learning_rate
