@@ -4,16 +4,16 @@
 
 wandb_log = True
 wandb_project = 'hhmm_scaling'
-wandb_run_name='hhmm-100k-tiny'
+wandb_run_name='hhmm-6-4-1M'
 
 # training setting
 device = 'mps'
 compile = False
 
 # dataset stuff
-L = 12
-S = 2
-n = 100000
+L = 6
+S = 4
+n = 1000000
 dataset = f"hhmm_uni_{L}_{S}_{n}"
 data_dir = "data"
 
@@ -30,18 +30,20 @@ gradient_accumulation_steps = 1
 # model stuff
 n_layer = 4
 n_head = 4
-n_embed = 128
+n_embd = 128 #n_embd NOT n_embed
 dropout = 0.0
 
 # these are just guesses
 learning_rate = 3e-3
 min_lr = 3e-5
 
-max_iters = 500 # ~23 epoch for 100k data
-lr_decay_iters = max_iters
+max_iters = 3000 
+warmup_iters = max_iters // 20 # warm up for 5% of training
+warmdown_ratio = 0.8 # warmdown over the last 80% of training
+lr_decay_iters = max_iters # decay over whole training
 
 # eval stuff
-eval_interval = 100
+eval_interval = 100 # also controls logs to wandb
 eval_iters = 50
 log_interval = 10
 
