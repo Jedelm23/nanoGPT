@@ -3,10 +3,15 @@ from pathlib import Path
 
 OUT_DIR = Path("runs/datascale_iters")
 
-MAX_ITERS_LIST = [100, 300, 1000, 3000, 10000] #up to 10M tokens total
-SEEDS = [0] # ignore for now; going to do multiple seeds later
+MAX_ITERS_LIST = [1000]#, 300, 1000, 3000, 10000] #up to 10M tokens total
+SEEDS = [1]#[1, 2, 3, 4] # ignore for now; going to do multiple seeds later
 
-def run_experiment(max_iters, seed):
+run_name = "hhmm-6-4-1M-"
+# append a timestamp to run_name to make it unique
+import time
+run_name += str(int(time.time()))
+
+def run_experiment(max_iters, seed):    
     tag = f"maxsteps_{max_iters}_seed_{seed}"
     out_dir = OUT_DIR / tag
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -15,9 +20,9 @@ def run_experiment(max_iters, seed):
         "python", "train.py",
         "config/train_synthetic_data.py",      # base config
         #f"--out_dir={out_dir}",          # nanoGPT supports this override
-        #f"--seed={seed}", # add in seed ability later
+        f"--seed={seed}", # set seed for reproducibility 
         f"--max_iters={max_iters}", # override max iters
-        f"--wandb_run_name=hhmm-12-2-1M-{max_iters}", # unique wandb name
+        f"--wandb_run_name={run_name}-{max_iters}-{seed}", # unique wandb name
         f"--warmup_iters={max_iters // 20}", # override warmup iters
         f"--lr_decay_iters={max_iters}", # override lr decay iters
     ]
