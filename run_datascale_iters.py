@@ -3,10 +3,11 @@ from pathlib import Path
 
 OUT_DIR = Path("runs/datascale_iters")
 
-MAX_ITERS_LIST = [1000]#, 300, 1000, 3000, 10000] #up to 10M tokens total
-SEEDS = [1]#[1, 2, 3, 4] # ignore for now; going to do multiple seeds later
+MAX_ITERS_LIST = [100, 300, 1000, 3000, 10000] #up to 10M tokens total
+SEEDS = [1, 2, 3, 4] # ignore for now; going to do multiple seeds later
 
-run_name = "hhmm-6-4-1M-"
+run_name = "hhmm-6-4-10M-"
+
 # append a timestamp to run_name to make it unique
 import time
 run_name += str(int(time.time()))

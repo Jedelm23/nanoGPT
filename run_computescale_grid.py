@@ -9,7 +9,7 @@ OUT_DIR = Path("runs/computescale_grid")
 MAX_ITERS_LIST = [50, 100, 300, 1000, 3000] # control D, tokens seen (max_iters * batch_size * block_size * gradient_accumulation_steps * ddp_world_size)
 N_LAYERS_LIST = [2, 4, 8, 12]    # control N, model capacity
 N_EMBD_FACTOR = 32 # factor to multiply n_embd to scale with n_layers, n_head scales with n_layers
-SEEDS = [0] # repeat for multiple data points
+SEEDS = [1] # repeat for multiple data points
 
 run_name = "hhmm-6-4-10M-"
 
